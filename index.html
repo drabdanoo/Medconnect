@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ميد كونكت - حجز وإدارة المواعيد</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Cairo', sans-serif; padding-bottom: 80px; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-shadow { box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .specialty-card:hover { transform: translateY(-2px); transition: all 0.3s ease; }
+        .modal-content {
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        .modal-visible .modal-content {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .status-pending { background-color: #fffbeb; color: #f59e0b; }
+        .status-confirmed { background-color: #f0fdf4; color: #16a34a; }
+        .status-canceled { background-color: #fef2f2; color: #dc2626; }
+        .modal-open { overflow: hidden; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <!-- Role Selection View -->
+    <div id="roleSelectionView" class="hidden flex flex-col items-center justify-center min-h-screen p-6 gradient-bg">
+        <div class="w-full max-w-sm text-center">
+            <h1 class="text-4xl font-bold text-white">ميد كونكت</h1>
+            <p class="text-lg text-blue-100 mt-2 mb-12">أهلاً بك في نظام حجز المواعيد</p>
+            <div class="space-y-4">
+                <button onclick="selectRole('patient')" class="w-full bg-white text-blue-600 font-bold py-4 rounded-xl shadow-lg text-lg hover:bg-gray-100 transition-transform transform hover:scale-105">
+                    أنا مريض
+                </button>
+                <button onclick="selectRole('doctor')" class="w-full bg-white bg-opacity-20 text-white font-bold py-4 rounded-xl text-lg hover:bg-opacity-30 transition-transform transform hover:scale-105">
+                    أنا طبيب
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Patient View Container -->
+    <div id="patientContainer" class="hidden">
+        <!-- Header -->
+        <div class="gradient-bg text-white p-6 pb-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold">ميد كونكت</h1>
+                    <p class="text-blue-100 text-sm">صحتكم أولويتنا</p>
+                </div>
+                 <button onclick="showRoleSelectionView()" class="text-sm text-white bg-white bg-opacity-20 px-3 py-1 rounded-full">تغيير الدور</button>
+            </div>
+            <form id="searchForm" class="relative">
+                <input type="text" id="searchInput" placeholder="ابحث عن الأطباء، التخصصات..."
+                       class="w-full p-4 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white"
+                       oninput="searchDoctors(this.value)">
+                <button type="submit" class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 focus:outline-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </button>
+            </form>
+        </div>
+        <!-- Quick Actions -->
+        <div class="px-6 -mt-4 mb-6">
+            <div class="bg-white rounded-xl card-shadow p-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="showBookingForm()" class="bg-blue-500 text-white p-4 rounded-lg text-center hover:bg-blue-600 transition-colors">
+                        <div class="text-2xl mb-2">📅</div><div class="font-medium">احجز الآن</div>
+                    </button>
+                    <button onclick="showAppointments()" class="bg-green-500 text-white p-4 rounded-lg text-center hover:bg-green-600 transition-colors">
+                        <div class="text-2xl mb-2">📋</div><div class="font-medium">مواعيـدي</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Main Content -->
+        <div id="mainContent" class="px-6">
+            <div id="specialtiesSection" class="mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">البحث حسب التخصص</h2>
+                <div id="specialtiesGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-4"></div>
+            </div>
+            <div id="doctorsSection" class="mb-8">
+                <div id="doctorsHeader" class="flex justify-between items-center mb-4">
+                     <h2 id="doctorsTitle" class="text-xl font-semibold text-gray-800">الأطباء الأعلى تقييماً</h2>
+                </div>
+                <div id="doctorsList" class="space-y-4"></div>
+            </div>
+        </div>
+        <!-- Appointments View -->
+        <div id="appointmentsView" class="hidden px-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-800">مواعيـدي</h2>
+                <button onclick="showMainContent()" class="text-blue-500 hover:text-blue-600 font-medium">→ رجوع</button>
+            </div>
+            <div id="appointmentsList" class="space-y-4"></div>
+        </div>
+        <!-- Profile View -->
+        <div id="profileView" class="hidden px-6">
+             <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-800">ملفي الشخصي</h2>
+            </div>
+            <div class="bg-white rounded-xl card-shadow p-6 text-center">
+                <div class="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center text-4xl mx-auto mb-4">👤</div>
+                <h3 class="font-semibold text-lg">معرّف المريض المؤقت</h3>
+                <p class="text-sm text-gray-600 mb-4">هذا هو المعرف الخاص بك لهذا الجهاز. استخدمه إذا احتجت للدعم.</p>
+                <p class="text-sm text-gray-800 bg-gray-100 p-2 rounded-lg break-all mb-4" id="patientUserId"></p>
+            </div>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-2 z-10">
+            <div class="flex justify-around">
+                <button id="navHome" onclick="showMainContent()" class="flex flex-col items-center space-y-1 text-blue-500 w-1/4 py-2 rounded-lg"><span class="text-2xl">🏠</span><span class="text-xs font-medium">الرئيسية</span></button>
+                <button id="navBook" onclick="showBookingForm()" class="flex flex-col items-center space-y-1 text-gray-400 w-1/4 py-2 rounded-lg"><span class="text-2xl">📅</span><span class="text-xs font-medium">حجز</span></button>
+                <button id="navAppts" onclick="showAppointments()" class="flex flex-col items-center space-y-1 text-gray-400 w-1/4 py-2 rounded-lg"><span class="text-2xl">📋</span><span class="text-xs font-medium">المواعيد</span></button>
+                <button id="navProfile" onclick="showProfile()" class="flex flex-col items-center space-y-1 text-gray-400 w-1/4 py-2 rounded-lg"><span class="text-2xl">👤</span><span class="text-xs font-medium">ملفي</span></button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Doctor Login View -->
+    <div id="doctorLoginView" class="hidden flex flex-col items-center justify-center min-h-screen p-6 bg-gray-100">
+         <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg">
+             <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">لوحة تحكم الطبيب</h2>
+                <button onclick="showRoleSelectionView()" class="text-sm text-gray-500 hover:text-gray-700">رجوع</button>
+             </div>
+             <p class="text-gray-600 mb-4">اختر اسمك من القائمة للوصول إلى مواعيدك.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">اختر اسمك</label>
+                    <select id="doctorSelector" class="w-full p-3 border border-gray-300 rounded-lg"></select>
+                </div>
+                <button onclick="loginAsDoctor()" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition-colors">
+                    عرض المواعيد
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Doctor Dashboard View -->
+    <div id="doctorDashboardView" class="hidden p-6">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800">مواعيد اليوم</h2>
+                <p id="doctorNameDisplay" class="text-gray-600"></p>
+            </div>
+            <button onclick="showDoctorLogin()" class="text-sm text-gray-500 bg-gray-200 px-3 py-1 rounded-full hover:bg-gray-300">العودة لاختيار طبيب</button>
+        </div>
+        <div id="doctorAppointmentsList" class="space-y-4"></div>
+    </div>
+
+    <!-- Booking Form Modal -->
+    <div id="bookingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 p-4 flex items-center justify-center">
+        <div class="modal-content bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div id="bookingFormView" class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold">حجز موعد</h2>
+                    <button onclick="closeBookingForm()" class="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                <form onsubmit="submitBooking(event)" class="space-y-4">
+                    <input type="hidden" id="doctorAvatar">
+                    <div class="relative">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">الطبيب</label>
+                        <input type="text" id="doctorSearchInput" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ابحث عن اسم الطبيب..." autocomplete="off">
+                        <div id="doctorSearchResults" class="absolute z-10 w-full bg-white border border-gray-300 rounded-b-lg mt-1 max-h-48 overflow-y-auto hidden"></div>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-2">التخصص</label><input type="text" id="specialty" class="w-full p-3 bg-gray-100 border border-gray-300 rounded-lg" readonly></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-2">التاريخ المفضل</label><input type="date" id="appointmentDate" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required></div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">الوقت المفضل</label>
+                        <select id="appointmentTime" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <option value="">اختر الوقت</option>
+                            <option value="10:00">10:00 صباحًا</option><option value="11:00">11:00 صباحًا</option><option value="12:00">12:00 مساءً</option><option value="13:00">1:00 مساءً</option><option value="14:00">2:00 مساءً</option><option value="15:00">3:00 مساءً</option><option value="16:00">4:00 مساءً</option><option value="17:00">5:00 مساءً</option><option value="18:00">6:00 مساءً</option><option value="19:00">7:00 مساءً</option><option value="20:00">8:00 مساءً</option><option value="21:00">9:00 مساءً</option><option value="22:00">10:00 مساءً</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-2">سبب الزيارة (اختياري)</label><textarea id="reason" rows="3" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="وصف مختصر لحالتك"></textarea></div>
+                    <button type="submit" id="confirmButton" class="w-full bg-blue-500 text-white p-4 rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center justify-center">تأكيد الحجز</button>
+                </form>
+            </div>
+            <div id="bookingSuccessView" class="hidden text-center p-6 py-8">
+                <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4"><svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
+                <h2 class="text-2xl font-semibold text-gray-800 mb-2">تم إرسال طلبك!</h2>
+                <p class="text-gray-600 mb-6">سيتم تأكيد الموعد من قبل الطبيب قريباً. يمكنك متابعة الحالة في قسم "مواعيدي".</p>
+                <button onclick="closeBookingForm()" class="w-full bg-gray-200 text-gray-800 p-3 rounded-lg font-medium hover:bg-gray-300 transition-colors">تم</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Firebase and App Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, setLogLevel, where, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        let app, db, auth, userId;
+        let patientAppointmentsUnsubscribe = null;
+        let doctorAppointmentsUnsubscribe = null;
+        let currentDoctorName = null;
+        
+        // --- Data ---
+        const doctorsData = [
+            { name: "ناصح عبداللطيف", specialty: "اطفال", rating: 4.8, reviews: 112, avatar: "👨‍⚕️", clinic: "", location: "المصارف" },
+            { name: "مدثرعبدالعزيز", specialty: "طب طوارئ", rating: 4.6, reviews: 78, avatar: "👨‍⚕️", clinic: "", location: "المصارف" },
+            { name: "عاصم تحسين", specialty: "جراحة بولية", rating: 4.9, reviews: 130, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "هبه أحمد", specialty: "نسائية و توليد", rating: 4.7, reviews: 150, avatar: "👩‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "خلف علي صالح", specialty: "باطنية", rating: 4.9, reviews: 210, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "ياسر طاقة", specialty: "جراحة الدماغ و الجملة العصبية", rating: 4.8, reviews: 95, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "بشار موفق", specialty: "جراحة بولية", rating: 4.6, reviews: 88, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "انتصار حاجم", specialty: "نسائية و توليد", rating: 4.8, reviews: 165, avatar: "👩‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "يقظان السليم", specialty: "جراحة المفاصل و الكسور", rating: 4.7, reviews: 142, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "محمد عزيز", specialty: "جملة عصبية", rating: 4.9, reviews: 180, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "غسان محمد", specialty: "ENT", rating: 4.8, reviews: 121, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "محمد عصمت", specialty: "اطفال", rating: 4.7, reviews: 99, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "موفق المختار", specialty: "عيون", rating: 5, reviews: 250, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "محمد عيسى", specialty: "مفاصل و فقرات", rating: 4.6, reviews: 105, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "اوس نزار", specialty: "جراحة عامة", rating: 4.5, reviews: 85, avatar: "👨‍⚕️", clinic: "الطيب", location: "المصارف" },
+            { name: "وسام العشو", specialty: "GP", rating: 4.7, reviews: 115, avatar: "👩‍⚕️", clinic: "المعارج", location: "المصارف" },
+            { name: "صالح خاير", specialty: "جراحة عامة", rating: 4.8, reviews: 190, avatar: "👨‍⚕️", clinic: "سمرقند", location: "المصارف" },
+            { name: "اسامه محمد", specialty: "جراحة الدماغ و الجملة العصبية", rating: 4.9, reviews: 102, avatar: "👨‍⚕️", clinic: "سمرقند", location: "المصارف" },
+            { name: "غانم العلاف", specialty: "GP", rating: 4.6, reviews: 130, avatar: "👨‍⚕️", clinic: "سما المصارف", location: "المصارف" },
+            { name: "محفوظ سليمان", specialty: "نفسية", rating: 4.9, reviews: 155, avatar: "👨‍⚕️", clinic: "سما المصارف", location: "المصارف" },
+            { name: "عبدالله ناطق", specialty: "كسور", rating: 4.7, reviews: 124, avatar: "👨‍⚕️", clinic: "سما المصارف", location: "المصارف" },
+            { name: "محمد هشام", specialty: "جراحة عامة", rating: 4.6, reviews: 92, avatar: "👨‍⚕️", clinic: "سما المصارف", location: "المصارف" },
+            { name: "سعد صلاح الدين", specialty: "جراحة أطفال", rating: 4.8, reviews: 140, avatar: "👨‍⚕️", clinic: "الشموخ", location: "المصارف" },
+            { name: "علي عبدالرحمن", specialty: "مفاصل", rating: 4.7, reviews: 160, avatar: "👨‍⚕️", clinic: "الشموخ", location: "المصارف" },
+            { name: "سهى مظفر", specialty: "نسائية و توليد", rating: 4.9, reviews: 175, avatar: "👩‍⚕️", clinic: "الشموخ", location: "المصارف" },
+            { name: "سيف مظفر", specialty: "جراحة عامة", rating: 4.7, reviews: 110, avatar: "👨‍⚕️", clinic: "الشموخ", location: "المصارف" },
+            { name: "علاء ابراهيم", specialty: "ENT", rating: 4.8, reviews: 133, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "ريم البرهاوي", specialty: "نسائية و توليد", rating: 4.9, reviews: 158, avatar: "👩‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "عادل محي الدين", specialty: "باطنية", rating: 5, reviews: 280, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "احمد زهير", specialty: "مفاصل", rating: 4.7, reviews: 148, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "سرمد مصطفى", specialty: "عيون", rating: 4.8, reviews: 169, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "معتز العاني", specialty: "جراحة أطفال", rating: 4.9, reviews: 135, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "عبدالله شاكر", specialty: "جملة عصبية", rating: 4.8, reviews: 177, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "رائد الحموش", specialty: "اورام", rating: 4.9, reviews: 195, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" },
+            { name: "عمرو صلاح", specialty: "جراحة عامة", rating: 4.7, reviews: 128, avatar: "👨‍⚕️", clinic: "الصفا", location: "المصارف" }
+        ];
+        const specialtiesData = [
+            { name: "اطفال", icon: "👶", description: "متخصص أطفال" },{ name: "طب طوارئ", icon: "🚑", description: "الحالات الطارئة" },{ name: "جراحة بولية", icon: "💧", description: "المسالك البولية" },{ name: "نسائية و توليد", icon: "🤰", description: "صحة المرأة" },{ name: "باطنية", icon: "❤️", description: "الأمراض الداخلية" },{ name: "جراحة الدماغ و الجملة العصبية", icon: "🧠", description: "متخصص أعصاب" },{ name: "جراحة المفاصل و الكسور", icon: "🦴", description: "العظام والمفاصل" },{ name: "جملة عصبية", icon: "🧠", description: "متخصص أعصاب" },{ name: "ENT", icon: "👂", description: "أنف وأذن وحنجرة" },{ name: "عيون", icon: "👁️", description: "صحة العيون" },{ name: "مفاصل و فقرات", icon: "🦴", description: "العظام والعمود الفقري" },{ name: "جراحة عامة", icon: "⚕️", description: "العمليات الجراحية" },{ name: "GP", icon: "🩺", description: "طبيب عام" },{ name: "نفسية", icon: "🧠", description: "الصحة النفسية" },{ name: "كسور", icon: "🦴", description: "متخصص كسور" },{ name: "جراحة أطفال", icon: "👶", description: "جراحة الأطفال" },{ name: "مفاصل", icon: "🦴", description: "أمراض المفاصل" },{ name: "اورام", icon: "🎗️", description: "متخصص أورام" }
+        ];
+
+        // --- App Initialization & Auth Management ---
+        async function initialize() {
+            try {
+                // const firebaseConfig = {
+  apiKey: "AIzaSyCRaqa6qsrkQkJpILUi1Qiq_7TjFgiQEig",
+  authDomain: "studio-101479434-27b19.firebaseapp.com",
+  projectId: "studio-101479434-27b19",
+  storageBucket: "studio-101479434-27b19.firebasestorage.app",
+  messagingSenderId: "403979057234",
+  appId: "1:403979057234:web:c013cd841ccc886c9bc78b"
+};
+                app = initializeApp(cfg);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                if (typeof setLogLevel !== 'undefined') {
+                    setLogLevel('debug');
+                }
+
+                const authPromise = new Promise((resolve, reject) => {
+                    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                        unsubscribe(); 
+                        if (user) {
+                            resolve(user);
+                        } else {
+                            try {
+                                const userCredential = await signInAnonymously(auth);
+                                resolve(userCredential.user);
+                            } catch (error) {
+                                reject(error);
+                            }
+                        }
+                    });
+                });
+
+                const user = await authPromise;
+                userId = user.uid;
+                document.getElementById('patientUserId').textContent = userId;
+                
+                showRoleSelectionView();
+                populateDoctorSelector();
+
+            } catch (e) {
+                console.error("Initialization or Auth failed:", e);
+                if (e.message.includes('__firebase_config')) {
+                    alert('Configuration error. Check Firebase config injection.');
+                } else {
+                    document.body.innerHTML = "Could not connect to the service. Please refresh the page.";
+                }
+            }
+        }
+
+        // --- View Management ---
+        window.showRoleSelectionView = () => {
+            document.getElementById('roleSelectionView').style.display = 'flex';
+            document.getElementById('patientContainer').style.display = 'none';
+            document.getElementById('doctorLoginView').style.display = 'none';
+            document.getElementById('doctorDashboardView').style.display = 'none';
+            if (patientAppointmentsUnsubscribe) patientAppointmentsUnsubscribe();
+            if (doctorAppointmentsUnsubscribe) doctorAppointmentsUnsubscribe();
+        };
+        
+        window.selectRole = (role) => {
+            if (role === 'patient') {
+                showPatientView();
+            } else if (role === 'doctor') {
+                showDoctorLogin();
+            }
+        };
+
+        window.showPatientView = () => {
+            document.getElementById('roleSelectionView').style.display = 'none';
+            document.getElementById('patientContainer').style.display = 'block';
+            initializePatientLogic();
+        };
+
+        window.showDoctorLogin = () => {
+            document.getElementById('roleSelectionView').style.display = 'none';
+            document.getElementById('patientContainer').style.display = 'none';
+            document.getElementById('doctorLoginView').style.display = 'flex';
+            document.getElementById('doctorDashboardView').style.display = 'none';
+        };
+
+        window.showDoctorDashboard = (doctorName) => {
+            document.getElementById('doctorLoginView').style.display = 'none';
+            document.getElementById('doctorDashboardView').style.display = 'block';
+            document.getElementById('doctorNameDisplay').textContent = `Dr. ${doctorName}`;
+            initializeDoctorLogic(doctorName);
+        };
+
+        window.showMainContent = () => {
+            document.getElementById('mainContent').classList.remove('hidden');
+            document.getElementById('appointmentsView').classList.add('hidden');
+            document.getElementById('profileView').classList.add('hidden');
+            updateNav('Home');
+        };
+
+        window.showAppointments = () => {
+            document.getElementById('mainContent').classList.add('hidden');
+            document.getElementById('appointmentsView').classList.remove('hidden');
+            document.getElementById('profileView').classList.add('hidden');
+            updateNav('Appts');
+        };
+
+        window.showProfile = () => {
+            document.getElementById('mainContent').classList.add('hidden');
+            document.getElementById('appointmentsView').classList.add('hidden');
+            document.getElementById('profileView').classList.remove('hidden');
+            updateNav('Profile');
+        };
+
+        window.showBookingForm = () => {
+            document.body.classList.add('modal-open');
+            const modal = document.getElementById('bookingModal');
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.classList.add('modal-visible'), 10);
+            updateNav('Book');
+        };
+
+        window.closeBookingForm = () => {
+            document.body.classList.remove('modal-open');
+            const modal = document.getElementById('bookingModal');
+            modal.classList.remove('modal-visible');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.getElementById('bookingFormView').classList.remove('hidden');
+                document.getElementById('bookingSuccessView').classList.add('hidden');
+                
+                const form = document.querySelector('#bookingFormView form');
+                form.reset();
+                document.getElementById('doctorSearchInput').value = '';
+                document.getElementById('specialty').value = '';
+                document.getElementById('doctorAvatar').value = '';
+            }, 300);
+        };
+        
+        // --- Patient Logic ---
+        function initializePatientLogic() {
+            if (!userId) return; // Guard against rare race conditions
+            loadSpecialties();
+            loadDoctors({ limit: 4 });
+            setupEventListeners();
+            
+            const appointmentsCollection = collection(db, `artifacts/${appId}/public/data/appointments`);
+            const q = query(appointmentsCollection, where("patientId", "==", userId));
+            if (patientAppointmentsUnsubscribe) patientAppointmentsUnsubscribe();
+            patientAppointmentsUnsubscribe = onSnapshot(q, (snapshot) => {
+                const appointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                appointments.sort((a, b) => new Date(b.date) - new Date(a.date));
+                renderPatientAppointments(appointments);
+            }, (error) => {
+                 console.error("Patient snapshot listener error:", error);
+            });
+        }
+        
+        window.submitBooking = async (event) => {
+            event.preventDefault();
+            if (!userId) return;
+            const confirmButton = document.getElementById('confirmButton');
+            confirmButton.disabled = true;
+            confirmButton.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> جار الحجز...`;
+            const appointmentData = {
+                doctor: document.getElementById('doctorSearchInput').value,
+                specialty: document.getElementById('specialty').value,
+                avatar: document.getElementById('doctorAvatar').value,
+                date: document.getElementById('appointmentDate').value,
+                time: document.getElementById('appointmentTime').value,
+                reason: document.getElementById('reason').value,
+                status: 'مطلوب تأكيد',
+                patientId: userId,
+                patientPhone: 'N/A' // No longer collecting phone number
+            };
+
+            if (!appointmentData.doctor || !appointmentData.specialty) {
+                alert("الرجاء اختيار طبيب من القائمة.");
+                 confirmButton.disabled = false;
+                 confirmButton.innerHTML = 'تأكيد الحجز';
+                return;
+            }
+
+            try {
+                const appointmentsCollection = collection(db, `artifacts/${appId}/public/data/appointments`);
+                await addDoc(appointmentsCollection, appointmentData);
+                document.getElementById('bookingFormView').classList.add('hidden');
+                document.getElementById('bookingSuccessView').classList.remove('hidden');
+            } catch (error) {
+                console.error("Error adding document: ", error);
+            } finally {
+                confirmButton.disabled = false;
+                confirmButton.innerHTML = 'تأكيد الحجز';
+            }
+        };
+
+        // --- Doctor Logic ---
+        function populateDoctorSelector() {
+            const selector = document.getElementById('doctorSelector');
+            selector.innerHTML = doctorsData.map(doc => `<option value="${doc.name}">${doc.name}</option>`).join('');
+        }
+
+        window.loginAsDoctor = () => {
+            const selectedDoctorName = document.getElementById('doctorSelector').value;
+            currentDoctorName = selectedDoctorName;
+            showDoctorDashboard(currentDoctorName);
+        };
+        
+        function initializeDoctorLogic(doctorName) {
+            if (!userId) return; // Guard against rare race conditions
+            const appointmentsCollection = collection(db, `artifacts/${appId}/public/data/appointments`);
+            const q = query(appointmentsCollection, where("doctor", "==", doctorName));
+            if (doctorAppointmentsUnsubscribe) doctorAppointmentsUnsubscribe();
+            doctorAppointmentsUnsubscribe = onSnapshot(q, (snapshot) => {
+                const appointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                appointments.sort((a, b) => new Date(a.date) - new Date(b.date));
+                renderDoctorAppointments(appointments);
+            }, (error) => {
+                 console.error("Doctor snapshot listener error:", error);
+            });
+        }
+        
+        window.updateAppointmentStatus = async (appointmentId, newStatus) => {
+            const appointmentRef = doc(db, `artifacts/${appId}/public/data/appointments`, appointmentId);
+            try {
+                await updateDoc(appointmentRef, { status: newStatus });
+            } catch (error) {
+                console.error("Error updating status: ", error);
+            }
+        };
+
+        // --- UI Rendering ---
+        function showLoadingSkeleton() {
+            const doctorsListEl = document.getElementById('doctorsList');
+            let skeletonHTML = '';
+            for (let i = 0; i < 3; i++) {
+                skeletonHTML += `
+                    <div class="bg-white rounded-xl p-4 card-shadow animate-pulse">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-16 h-16 bg-gray-200 rounded-full"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+                                <div class="h-3 bg-gray-200 rounded w-1/2"></div>
+                                <div class="h-3 bg-gray-200 rounded w-1/3"></div>
+                            </div>
+                            <div class="w-20 h-10 bg-gray-200 rounded-lg"></div>
+                        </div>
+                    </div>`;
+            }
+            doctorsListEl.innerHTML = skeletonHTML;
+        }
+
+        function loadSpecialties() {
+            const specialtiesGrid = document.getElementById('specialtiesGrid');
+            specialtiesGrid.innerHTML = [...new Map(specialtiesData.map(item => [item.name, item])).values()].map(specialty => `
+                <div class="specialty-card bg-white rounded-xl p-4 card-shadow cursor-pointer" onclick="selectSpecialty('${specialty.name}')"><div class="text-3xl mb-2">${specialty.icon}</div><div class="font-medium text-gray-800">${specialty.name}</div><p class="text-sm text-gray-500">${specialty.description}</p></div>
+            `).join('');
+        }
+        
+        function loadDoctors({ specialty = null, query = null, limit = null }) {
+            showLoadingSkeleton();
+            setTimeout(() => {
+                let filteredDoctors = doctorsData;
+                if (specialty) filteredDoctors = doctorsData.filter(doc => doc.specialty === specialty);
+                if(query) {
+                    const lowerCaseQuery = query.toLowerCase();
+                    filteredDoctors = doctorsData.filter(doc => doc.name.toLowerCase().includes(lowerCaseQuery) || doc.specialty.toLowerCase().includes(lowerCaseQuery) || (doc.clinic && doc.clinic.toLowerCase().includes(lowerCaseQuery)));
+                }
+                const doctorsToShow = limit ? filteredDoctors.slice(0, limit) : filteredDoctors;
+                renderDoctorsList(doctorsToShow);
+                const doctorsListEl = document.getElementById('doctorsList');
+                if (limit && doctorsData.length > limit && !specialty && !query) {
+                    doctorsListEl.innerHTML += `<div class="text-center py-4"><button onclick="loadAllDoctors()" class="text-blue-500 hover:text-blue-600 font-medium">عرض كل الأطباء (${doctorsData.length})</button></div>`;
+                } else if (query && doctorsToShow.length === 0) {
+                     doctorsListEl.innerHTML = `<div class="text-center py-8 text-gray-500"><div class="text-4xl mb-2">🤷</div><p>لا يوجد أطباء مطابقون لبحثك عن "${query}"</p></div>`;
+                }
+            }, 500);
+        }
+
+        function renderDoctorsList(doctors) {
+            const doctorsListEl = document.getElementById('doctorsList');
+            if (doctors.length === 0) {
+                doctorsListEl.innerHTML = `<div class="text-center py-8 text-gray-500"><div class="text-4xl mb-2">🤷</div><p>لا يوجد أطباء بهذا التخصص حالياً.</p></div>`;
+                return;
+            }
+            doctorsListEl.innerHTML = doctors.map(doctor => `
+                <div class="bg-white rounded-xl p-4 card-shadow">
+                    <div class="flex items-start space-x-4">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-3xl flex-shrink-0">${doctor.avatar}</div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-gray-800">${doctor.name}</h3>
+                            <p class="text-sm text-blue-600 font-medium">${doctor.specialty}</p>
+                            <div class="flex items-center mt-1 text-sm text-gray-500">
+                                <span class="text-yellow-400">${'⭐'.repeat(Math.floor(doctor.rating))}</span>
+                                <span class="mr-2">${doctor.rating} (${doctor.reviews} تقييم)</span>
+                            </div>
+                            ${doctor.clinic ? `<div class="flex items-center mt-2 text-sm text-gray-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>مجمع ${doctor.clinic}</div>` : ''}
+                            <div class="flex items-center mt-1 text-sm text-gray-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>${doctor.location}</div>
+                        </div>
+                        <button onclick="bookDoctor('${doctor.name}', '${doctor.specialty}', '${doctor.avatar}')" class="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors self-end flex-shrink-0">احجز</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        function renderPatientAppointments(appointments) {
+            const appointmentsListEl = document.getElementById('appointmentsList');
+            const statusClasses = { 'مطلوب تأكيد': 'status-pending', 'مؤكد': 'status-confirmed', 'ملغي': 'status-canceled' };
+            if (appointments.length === 0) {
+                appointmentsListEl.innerHTML = `<div class="text-center py-8 text-gray-500"><div class="text-4xl mb-2">📅</div><p>لا توجد مواعيد مجدولة بعد.</p><button onclick="showBookingForm()" class="mt-4 bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors">احجز موعدك الأول</button></div>`;
+                return;
+            }
+            appointmentsListEl.innerHTML = appointments.map(apt => `
+                <div class="bg-white rounded-xl p-4 card-shadow"><div class="flex items-center justify-between mb-3"><div class="flex items-center space-x-3"><div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-2xl">${apt.avatar || '👨‍⚕️'}</div><div><h3 class="font-semibold text-gray-800">${apt.doctor}</h3><p class="text-sm text-gray-600">${apt.specialty}</p></div></div><span class="px-3 py-1 rounded-full text-sm font-medium ${statusClasses[apt.status] || 'bg-gray-100 text-gray-800'}">${apt.status}</span></div><div class="border-t border-gray-100 mt-3 pt-3 text-sm text-gray-600 space-y-1"><p><strong>التاريخ:</strong> ${new Date(apt.date + 'T00:00:00').toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p><p><strong>الوقت:</strong> ${formatTime(apt.time)}</p>${apt.reason ? `<p class="pt-1"><strong>السبب:</strong> ${apt.reason}</p>` : ''}</div></div>
+            `).join('');
+        }
+        function renderDoctorAppointments(appointments) {
+            const listEl = document.getElementById('doctorAppointmentsList');
+            if (appointments.length === 0) {
+                listEl.innerHTML = `<div class="text-center py-12 text-gray-500"><div class="text-5xl mb-4">🎉</div><h3 class="text-xl font-medium">لا توجد مواعيد اليوم.</h3><p>استمتع بيومك!</p></div>`;
+                return;
+            }
+            listEl.innerHTML = appointments.map(apt => `
+                <div class="bg-white p-4 rounded-xl card-shadow">
+                    <div class="flex justify-between items-start">
+                        <div class="space-y-1">
+                            <h3 class="font-semibold text-gray-800">موعد الساعة ${formatTime(apt.time)}</h3>
+                            <p class="text-sm text-gray-600">${new Date(apt.date + 'T00:00:00').toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                            ${apt.reason ? `<p class="text-sm text-gray-500 pt-2"><strong>السبب:</strong> ${apt.reason}</p>` : ''}
+                        </div>
+                        <div class="text-left">
+                            <span class="px-3 py-1 rounded-full text-sm font-medium ${ { 'مطلوب تأكيد': 'status-pending', 'مؤكد': 'status-confirmed', 'ملغي': 'status-canceled' }[apt.status] }">${apt.status}</span>
+                        </div>
+                    </div>
+                    ${apt.patientPhone !== 'N/A' ? `<div class="border-t mt-3 pt-3"><p class="text-sm text-gray-800"><strong>رقم هاتف المريض:</strong> <a href="tel:${apt.patientPhone}" class="text-blue-600" dir="ltr">${apt.patientPhone}</a></p></div>` : ''}
+                    ${apt.status === 'مطلوب تأكيد' ? `<div class="border-t mt-4 pt-4 flex gap-3"><button onclick="updateAppointmentStatus('${apt.id}', 'مؤكد')" class="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600">تأكيد</button><button onclick="updateAppointmentStatus('${apt.id}', 'ملغي')" class="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600">إلغاء</button></div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // --- Event Handlers & Utilities ---
+        window.loadAllDoctors = () => { loadDoctors({}); document.getElementById('doctorsTitle').textContent = 'كل الأطباء'; };
+        window.searchDoctors = (query) => { 
+            const specialtiesSection = document.getElementById('specialtiesSection');
+            if (!query.trim()) { 
+                selectSpecialty(null); 
+                return; 
+            } 
+            specialtiesSection.classList.add('hidden');
+            loadDoctors({ query: query }); 
+            document.getElementById('doctorsTitle').textContent = `نتائج البحث`; 
+            addBackButton(); 
+        };
+        window.bookDoctor = (doctorName, specialty, avatar) => { 
+            showBookingForm();
+            setTimeout(() => {
+                selectDoctor({ name: doctorName, specialty: specialty, avatar: avatar });
+            }, 100);
+        };
+        window.selectSpecialty = (specialty) => { 
+            const doctorsTitle = document.getElementById('doctorsTitle'); 
+            const specialtiesSection = document.getElementById('specialtiesSection');
+            document.getElementById('searchInput').value = ''; 
+            if (specialty) { 
+                specialtiesSection.classList.add('hidden');
+                loadDoctors({ specialty: specialty }); 
+                doctorsTitle.textContent = `أطباء ${specialty}`; 
+                addBackButton(); 
+                document.getElementById('doctorsSection').scrollIntoView({ behavior: 'smooth' }); 
+            } else { 
+                specialtiesSection.classList.remove('hidden');
+                loadDoctors({ limit: 4 }); 
+                doctorsTitle.textContent = 'الأطباء الأعلى تقييماً'; 
+                removeBackButton(); 
+            } 
+        };
+        function updateNav(activeItem) { const navItems = { 'Home': 'navHome', 'Book': 'navBook', 'Appts': 'navAppts', 'Profile': 'navProfile' }; Object.values(navItems).forEach(id => { document.getElementById(id).classList.remove('text-blue-500'); document.getElementById(id).classList.add('text-gray-400'); }); if(navItems[activeItem]) { document.getElementById(navItems[activeItem]).classList.add('text-blue-500'); document.getElementById(navItems[activeItem]).classList.remove('text-gray-400'); } }
+        function addBackButton() { removeBackButton(); const backButton = document.createElement('button'); backButton.id = 'backToAll'; backButton.className = 'text-sm text-blue-500 hover:text-blue-600 font-medium'; backButton.innerHTML = '→ رجوع للكل'; backButton.onclick = () => selectSpecialty(null); document.getElementById('doctorsHeader').appendChild(backButton); }
+        function removeBackButton() { const backButton = document.getElementById('backToAll'); if (backButton) backButton.remove(); }
+        function formatTime(time) { const [hours, minutes] = time.split(':'); const hour = parseInt(hours); const ampm = hour >= 12 ? 'مساءً' : 'صباحًا'; const displayHour = hour % 12 || 12; return `${displayHour}:${minutes} ${ampm}`; }
+        
+        function handleDoctorSearch(input) {
+            const searchResultsEl = document.getElementById('doctorSearchResults');
+            const query = input.value.toLowerCase();
+            if (!query) {
+                searchResultsEl.classList.add('hidden');
+                return;
+            }
+            const filteredDoctors = doctorsData.filter(doc => doc.name.toLowerCase().includes(query));
+            if (filteredDoctors.length > 0) {
+                searchResultsEl.innerHTML = filteredDoctors.map(doc => 
+                    `<div class="p-3 hover:bg-gray-100 cursor-pointer" data-name="${doc.name}" data-specialty="${doc.specialty}" data-avatar="${doc.avatar}">${doc.name} - <span class="text-sm text-gray-500">${doc.specialty}</span></div>`
+                ).join('');
+                searchResultsEl.classList.remove('hidden');
+            } else {
+                searchResultsEl.classList.add('hidden');
+            }
+        }
+
+        function selectDoctor(doctor) {
+            document.getElementById('doctorSearchInput').value = doctor.name;
+            document.getElementById('specialty').value = doctor.specialty;
+            document.getElementById('doctorAvatar').value = doctor.avatar;
+            document.getElementById('doctorSearchResults').classList.add('hidden');
+        }
+
+        let isInitialized = false;
+        function setupEventListeners() {
+            if (isInitialized) return;
+            isInitialized = true;
+
+            document.getElementById('appointmentDate').min = new Date().toISOString().split('T')[0];
+            document.getElementById('bookingModal').addEventListener('click', function(e) {
+                if (e.target === this) { closeBookingForm(); }
+            });
+            document.getElementById('searchForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const query = document.getElementById('searchInput').value;
+                searchDoctors(query);
+            });
+            const doctorSearchInput = document.getElementById('doctorSearchInput');
+            doctorSearchInput.addEventListener('input', () => handleDoctorSearch(doctorSearchInput));
+            doctorSearchInput.addEventListener('blur', () => {
+                setTimeout(() => {
+                    document.getElementById('doctorSearchResults').classList.add('hidden');
+                }, 200);
+            });
+
+            document.getElementById('doctorSearchResults').addEventListener('mousedown', function(e) {
+                const target = e.target.closest('div');
+                if (target && target.dataset.name) {
+                    selectDoctor(target.dataset);
+                }
+            });
+        }
+        
+        // --- Start the App ---
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html>
+
